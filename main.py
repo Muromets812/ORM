@@ -1,102 +1,36 @@
 import sqlalchemy as sq
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
-import datetime as dt
+from sqlalchemy.orm import sessionmaker
+from models import Publisher, Book, Stock, Shop, Sale
+from models import recreate_tables
 import json
-
-engine = sq.create_engine('postgresql://postgres:NetologY@localhost:5432/books')
-Base = declarative_base()
-
-
-class Publisher(Base):
-    __tablename__ = 'publisher'
-
-    id = sq.Column(sq.Integer, primary_key=True)
-    name = sq.Column(sq.String(50), unique=True)
-
-    def __str__(self):
-        return f'User: {self.name}'
-
-    books = relationship('Book', back_populates='publisher')
-
-
-class Book(Base):
-    __tablename__ = 'book'
-    id = sq.Column(sq.BigInteger, primary_key=True)
-    title = sq.Column(sq.String, nullable=False)
-    id_publisher = sq.Column(sq.Integer, sq.ForeignKey('publisher.id'))
-
-    def __str__(self):
-        return f'Note text: {self.title[:15]}'
-
-    publishers = relationship('Publisher', back_populates='books')
-    stocks = relationship('Stok', secondary='stock', back_populates='stocks')
-
-
-class Stock(Base):
-    __tablename__ = 'stock'
-    id = sq.Column(sq.Integer, primary_key=True)
-    id_book = sq.Column(sq.Integer, sq.ForeignKey('book.id'))
-    id_shop = sq.Column(sq.Integer, sq.ForeignKey('shop.id'))
-    count = sq.Column(sq.Integer, nullable=False)
-
-    def __str__(self):
-        return f'Note text: {self.count}'
-
-    sales = relationship('Sale', back_populates='stocks')
-    publishers = relationship('Publisher', back_populates='books')
-
-
-class Shop(Base):
-    __tablename__ = 'shop'
-    id = sq.Column(sq.Integer, primary_key=True)
-    name = sq.Column(sq.String(40), nullable=False)
-
-    def __str__(self):
-        return f'Note text: {self.name}'
-
-    stocks = relationship('Stok', secondary='stock', back_populates='stocks')
-
-
-class Sale(Base):
-    __tablename__ = 'sale'
-    id = sq.Column(sq.Integer, primary_key=True)
-    prise = sq.Column(sq.Integer, nullable=False)
-    date_sale = sq.Column(sq.DateTime, default=dt.datetime.now)
-    id_shop = sq.Column(sq.Integer, sq.ForeignKey('stock.id'))
-    count = sq.Column(sq.Integer, nullable=False)
-
-    def __str__(self):
-        return f'Note text: {self.prise}'
-
-    stocks = relationship('Stock', back_populates='sales')
-
+import datetime as dt
 
 if __name__ == "__main__":
 
+    engine = sq.create_engine('postgresql://postgres:NetologY@localhost:5432/books')
+    recreate_tables(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
-    #session.close()
 
-
-    def recreate_tables(engine):
-        Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
-
-
-    recreate_tables(engine)
-
-    with open('tests_data.json') as f:
+    with open('tests_data.json', 'r') as f:
         data = json.load(f)
 
+    for record in data:
+        model = {
+            'publisher': Publisher,
+            'shop': Shop,
+            'book': Book,
+            'stock': Stock,
+            'sale': Sale,
+        }[record.get('model')]
+        session.add(model(id=record.get('pk'), **record.get('fields')))
+    session.commit()
 
-    for item in data:
-        if item['model'] == 'publisher':
-            print(item['fields']['name'])
-            insert_item = Publisher(name=item['fields']['name'])
-            session.add(insert_item)
-            session.commit()
+    publisher_name = input('Введите название издательства:nullable=False ')
+    my_query = session.query(Publisher, Book.title, Shop.name, Sale.price, Sale.date_sale).join(Book).join(Stock).join(Shop).join(Sale).filter(Publisher.name == publisher_name).all()
+
+    for item in my_query:
+        print(f"{item[1]} | {item[2]} | {item[3]} | {dt.datetime.date(item[4])}")
 
 
-    #i = Publisher(id="1", name="O’Reilly")
-    #session.add(i)
-    #session.commit()
+
